@@ -125,6 +125,26 @@ class AgentsApiReviewTests(unittest.TestCase):
         self.assertEqual(client.sessions.deleted, [])
         self.assertEqual(telemetry["session_cleanup"], "retained_by_configuration")
 
+    def test_astra_model_is_blocked_until_pr5_gate_is_explicitly_passed(self):
+        client, _ = self.make_client()
+        with patch.dict(os.environ, {"TIKVARON_AGENTS_MODEL": "gpt-6-astra"}, clear=False):
+            os.environ.pop("TIKVARON_ASTRA_VALIDATION_PASSED", None)
+            with self.assertRaisesRegex(ValueError, "until PR #5"):
+                review_pull_request_with_agents("diff", client=client)
+        self.assertIsNone(client.sessions.kwargs)
+
+    def test_astra_model_can_be_unlocked_only_with_validation_flag(self):
+        client, _ = self.make_client()
+        with patch.dict(
+            os.environ,
+            {
+                "TIKVARON_AGENTS_MODEL": "gpt-6-astra",
+                "TIKVARON_ASTRA_VALIDATION_PASSED": "true",
+            },
+        ):
+            review_pull_request_with_agents("diff", client=client)
+        self.assertEqual(client.sessions.kwargs["agent"]["model"], "gpt-6-astra")
+
     def test_subagent_limit_is_validated_before_session_creation(self):
         client, _ = self.make_client()
         with patch.dict(os.environ, {"TIKVARON_AGENTS_MAX_SUBAGENTS": "9"}):

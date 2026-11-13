@@ -1,0 +1,92 @@
+name: TIKVARON Engineering Intelligence — Live Validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_openai_smoke:
+        description: Send one billable smoke-test request to the OpenAI API
+        required: true
+        type: boolean
+        default: false
+      pr_numbers:
+        description: Exactly three existing open PR numbers, comma-separated (for example 12,34,56)
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  openai-smoke:
+    if: ${{ inputs.run_openai_smoke }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Restore and integrity-check pinned v0.2.0 source release
+        run: |
+          mkdir -p .release-cache .tikvaron-release && cat releases/.archive-data/tikvaron-engineering-intelligence-v0.2.0.zip.b64.part-* | base64 --decode > .release-cache/tikvaron-engineering-intelligence-v0.2.0.zip && unzip -t .release-cache/tikvaron-engineering-intelligence-v0.2.0.zip && unzip -q .release-cache/tikvaron-engineering-intelligence-v0.2.0.zip -d .tikvaron-release
+      - name: Install package
+        working-directory: .tikvaron-release/tikvaron-engineering-intelligence
+        run: python -m pip install --upgrade pip && pip install .
+      - name: Require configured API secret
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: test -n "$OPENAI_API_KEY" || (echo 'Add OPENAI_API_KEY in repository Settings → Secrets and variables → Actions' && exit 1)
+      - name: Run live OpenAI Responses API smoke test
+        working-directory: .tikvaron-release/tikvaron-engineering-intelligence
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          TIKVARON_OPENAI_MODEL: ${{ vars.TIKVARON_OPENAI_MODEL }}
+        run: tikvaron-live-openai-smoke
+
+  real-pr-pilot:
+    if: ${{ inputs.pr_numbers != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Restore and integrity-check pinned v0.2.0 source release
+        run: |
+          mkdir -p .release-cache .tikvaron-release && cat releases/.archive-data/tikvaron-engineering-intelligence-v0.2.0.zip.b64.part-* | base64 --decode > .release-cache/tikvaron-engineering-intelligence-v0.2.0.zip && unzip -t .release-cache/tikvaron-engineering-intelligence-v0.2.0.zip && unzip -q .release-cache/tikvaron-engineering-intelligence-v0.2.0.zip -d .tikvaron-release
+      - name: Install package
+        working-directory: .tikvaron-release/tikvaron-engineering-intelligence
+        run: python -m pip install --upgrade pip && pip install .
+      - name: Require configured API secret
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: test -n "$OPENAI_API_KEY" || (echo 'Add OPENAI_API_KEY in repository Settings → Secrets and variables → Actions' && exit 1)
+      - name: Copy trusted repository-aware pilot runner
+        run: cp .github/scripts/live_pr_validation.py .tikvaron-release/tikvaron-engineering-intelligence/scripts/live_pr_validation.py
+      - name: Run read-only live review against three real PRs
+        working-directory: .tikvaron-release/tikvaron-engineering-intelligence
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          TIKVARON_OPENAI_MODEL: ${{ vars.TIKVARON_OPENAI_MODEL }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_WORKSPACE: ${{ github.workspace }}
+          TIKVARON_VALIDATION_PR_NUMBERS: ${{ inputs.pr_numbers }}
+        run: python scripts/live_pr_validation.py
+      - name: Upload live PR validation record
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tikvaron-live-pr-validation-${{ github.run_id }}
+          path: .tikvaron-release/tikvaron-engineering-intelligence/artifacts/live-pr-validation.json
+          if-no-files-found: warn
+          retention-days: 30

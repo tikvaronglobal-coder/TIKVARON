@@ -15,8 +15,10 @@ jobs:
     env:
       TIKVARON_RELEASE_DIR: .tikvaron-release/tikvaron-engineering-intelligence
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
       - name: Restore and integrity-check pinned v0.2.0 source release
@@ -42,7 +44,7 @@ jobs:
         run: tikvaron-tests artifacts/junit.xml --output artifacts/test-intelligence.json
       - name: Publish test intelligence artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: tikvaron-test-intelligence-${{ github.run_id }}
           path: .tikvaron-release/tikvaron-engineering-intelligence/artifacts/

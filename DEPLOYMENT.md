@@ -9,6 +9,7 @@ The complete v0.2.0 release ZIP is committed under `releases/.archive-data/` as 
 - Add `OPENAI_API_KEY` as a repository Actions secret (Settings → Secrets and variables → Actions). Never commit or paste the key into chat.
 - Optionally set Actions variable `TIKVARON_OPENAI_MODEL`; default is `gpt-6.1-sol`.
 - Enable GitHub Actions and allow the PR review workflow to write pull-request comments.
+- The hardened PR review workflow uses a maintainer-applied `ai-review` label as an explicit spend-approval step. Create that repository label if it does not already exist; do not apply it to PRs unless a billable review is intended.
 
 ## Rollout
 

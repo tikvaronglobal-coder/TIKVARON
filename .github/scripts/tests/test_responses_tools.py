@@ -48,6 +48,8 @@ class ResponsesToolsTests(unittest.TestCase):
         self.assertIn("web_search", [tool["type"] for tool in configured])
         file_search = next(tool for tool in configured if tool["type"] == "file_search")
         self.assertEqual(file_search["vector_store_ids"], ["vs_tikvaron_docs"])
+        with self.assertRaises(ValueError):
+            build_responses_tools(vector_store_id="   ")
 
     def test_namespace_contains_strict_functions_and_deferred_tool(self):
         tools = build_responses_tools(enable_tool_search=True)

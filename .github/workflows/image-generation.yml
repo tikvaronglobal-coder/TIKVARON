@@ -36,6 +36,19 @@ jobs:
       - name: Restore service implementation and tests
         working-directory: packages/tikvaron-image-generation
         run: tar -xJf core-sources.tar.xz
+      - name: Apply validated CLI parser correction
+        working-directory: packages/tikvaron-image-generation
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("src/tikvaron_image_generation/cli.py")
+          source = path.read_text(encoding="utf-8")
+          before = 'respond = commands.add_parser(respond, help="Generate or refine using the Responses API")'
+          after = 'respond = commands.add_parser("respond", help="Generate or refine using the Responses API")'
+          if source.count(before) != 1:
+              raise SystemExit("Expected exactly one known CLI parser defect; refusing an unsafe patch")
+          path.write_text(source.replace(before, after, 1), encoding="utf-8")
+          PY
       - name: Install component and development tools
         working-directory: packages/tikvaron-image-generation
         run: python -m pip install --upgrade pip && pip install -e ".[dev]"

@@ -130,31 +130,52 @@ def review_pull_request_with_agents(
         {"type": "web_search"},
     ]
 
-    with api.beta.agents.sessions.create(
-        agent={
-            "model": model,
-            "instructions": _REVIEW_INSTRUCTIONS,
-            "tools": tools,
-            "multi_agent": {
-                "enabled": True,
-                "max_concurrent_subagents": max_subagents,
+    stream_source = None
+    session_id = None
+    cleanup_status = "not_started"
+    try:
+        stream_source = api.beta.agents.sessions.create(
+            agent={
+                "model": model,
+                "instructions": _REVIEW_INSTRUCTIONS,
+                "tools": tools,
+                "multi_agent": {
+                    "enabled": True,
+                    "max_concurrent_subagents": max_subagents,
+                },
             },
-        },
-        environment={"type": "none"},
-        input=_build_input(diff),
-        stream=True,
-    ).with_result_collection() as stream:
-        for event in stream:
-            event_type = _event_type(event)
-            if event_type:
-                event_types.append(event_type)
-                if event_type in _FAILURE_EVENT_TYPES:
-                    raise RuntimeError(f"Agents API session failed during event {event_type}")
-        result = stream.get_final_result()
+            environment={"type": "none"},
+            input=_build_input(diff),
+            stream=True,
+        )
+        with stream_source.with_result_collection() as stream:
+            for event in stream:
+                event_type = _event_type(event)
+                if event_type:
+                    event_types.append(event_type)
+                    if event_type in _FAILURE_EVENT_TYPES:
+                        raise RuntimeError(f"Agents API session failed during event {event_type}")
+            result = stream.get_final_result()
+            session_id = getattr(result, "session_id", None) or getattr(stream, "session_id", None)
 
-    review = getattr(result, "output_text", "")
-    if not isinstance(review, str) or not review.strip():
-        raise RuntimeError("The Agents API session completed without a final review")
+        review = getattr(result, "output_text", "")
+        if not isinstance(review, str) or not review.strip():
+            raise RuntimeError("The Agents API session completed without a final review")
+    finally:
+        session_id = session_id or getattr(stream_source, "session_id", None)
+        keep_sessions = os.getenv("TIKVARON_AGENTS_KEEP_SESSIONS", "").strip().lower() in {
+            "1", "true", "yes"
+        }
+        if keep_sessions:
+            cleanup_status = "retained_by_configuration"
+        elif session_id:
+            try:
+                api.beta.agents.sessions.delete(session_id)
+                cleanup_status = "deleted"
+            except Exception as exc:  # Cleanup must not discard a completed review.
+                cleanup_status = f"delete_failed:{type(exc).__name__}"
+        else:
+            cleanup_status = "skipped_no_session_id"
 
     if telemetry is not None:
         telemetry.update(
@@ -162,7 +183,8 @@ def review_pull_request_with_agents(
                 "provider": "openai",
                 "api": "agents",
                 "model": model,
-                "session_id": getattr(result, "session_id", None),
+                "session_id": session_id,
+                "session_cleanup": cleanup_status,
                 "event_count": len(event_types),
                 "event_types": event_types,
                 "diff_bytes": diff_bytes,

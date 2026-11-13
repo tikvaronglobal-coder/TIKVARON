@@ -58,8 +58,37 @@ def _root_final_text(output: Iterable[Any]) -> str:
     return "".join(text_parts).strip()
 
 
-def review_pull_request(diff: str, *, client: Any | None = None) -> str:
-    """Run correctness, security, and test-coverage agents against a PR diff."""
+def _serialize_usage(usage: Any) -> dict[str, Any] | None:
+    """Serialize provider usage without assuming a particular SDK model class."""
+    if usage is None:
+        return None
+    if isinstance(usage, dict):
+        return usage
+    if hasattr(usage, "model_dump"):
+        return usage.model_dump(mode="json", exclude_none=True)
+    fields = (
+        "input_tokens",
+        "output_tokens",
+        "total_tokens",
+        "input_tokens_details",
+        "output_tokens_details",
+    )
+    result = {field: getattr(usage, field) for field in fields if hasattr(usage, field)}
+    return result or None
+
+
+def review_pull_request(
+    diff: str,
+    *,
+    client: Any | None = None,
+    telemetry: dict[str, Any] | None = None,
+) -> str:
+    """Run correctness, security, and test-coverage agents against a PR diff.
+
+    When a telemetry dictionary is supplied, populate it with the provider's
+    response ID, model, service tier, and raw usage record. The ordinary return
+    value remains the Markdown review for backwards compatibility.
+    """
     if not isinstance(diff, str) or not diff.strip():
         raise ValueError("diff must be a non-empty string")
 
@@ -78,6 +107,18 @@ def review_pull_request(diff: str, *, client: Any | None = None) -> str:
         },
         betas=["responses_multi_agent=v1"],
     )
+
+    if telemetry is not None:
+        telemetry.update(
+            {
+                "provider": "openai",
+                "endpoint": "beta.responses",
+                "model": REVIEW_MODEL,
+                "response_id": getattr(response, "id", None),
+                "service_tier": getattr(response, "service_tier", None),
+                "usage": _serialize_usage(getattr(response, "usage", None)),
+            }
+        )
 
     review = _root_final_text(response.output)
     if not review:

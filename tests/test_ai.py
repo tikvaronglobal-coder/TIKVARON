@@ -35,6 +35,13 @@ class FakeClient:
 class AIReviewTests(unittest.TestCase):
     def test_multi_agent_review_uses_beta_and_extracts_root_final(self):
         response = SimpleNamespace(
+            id="resp_test_123",
+            service_tier="standard",
+            usage={
+                "input_tokens": 120,
+                "output_tokens": 42,
+                "total_tokens": 162,
+            },
             output=[
                 SimpleNamespace(
                     type="message",
@@ -48,16 +55,24 @@ class AIReviewTests(unittest.TestCase):
                     phase="final_answer",
                     content=[SimpleNamespace(type="output_text", text="## Review\nNo findings.")],
                 ),
-            ]
+            ],
         )
         client = FakeClient(beta_response=response)
+        telemetry = {}
 
-        result = review_pull_request("diff --git a/a.py b/a.py", client=client)
+        result = review_pull_request(
+            "diff --git a/a.py b/a.py",
+            client=client,
+            telemetry=telemetry,
+        )
 
         self.assertEqual(result, "## Review\nNo findings.")
         self.assertTrue(client.beta.responses.kwargs["multi_agent"]["enabled"])
         self.assertEqual(client.beta.responses.kwargs["multi_agent"]["max_concurrent_subagents"], 3)
         self.assertEqual(client.beta.responses.kwargs["betas"], ["responses_multi_agent=v1"])
+        self.assertEqual(telemetry["response_id"], "resp_test_123")
+        self.assertEqual(telemetry["usage"]["total_tokens"], 162)
+        self.assertEqual(telemetry["endpoint"], "beta.responses")
 
     def test_multi_agent_review_rejects_empty_diff(self):
         with self.assertRaises(ValueError):

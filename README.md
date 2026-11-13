@@ -43,9 +43,10 @@ The Agents API request is made only when the Agents CLI or the explicitly gated 
 | `TIKVARON_AGENTS_MODEL` | `gpt-6.1-sol` | Model for managed Agents API review sessions |
 | `TIKVARON_AGENTS_MAX_SUBAGENTS` | `3` | Concurrent specialist subagent limit; valid range is 1–4 |
 | `TIKVARON_AGENTS_KEEP_SESSIONS` | `false` | Set to `true` only when retaining completed sessions for debugging is required |
+| `TIKVARON_ASTRA_VALIDATION_PASSED` | unset | Must be explicitly set to `true` after PR #5's live Astra smoke test succeeds before this integration accepts `gpt-6-astra` |
 | `OPENAI_API_KEY` | — | OpenAI application key for Agents API requests |
 
-The default remains `gpt-6.1-sol`. Do not route this integration to `gpt-6-astra` until PR #5's opt-in live Responses API smoke test has passed and the maintainer has deliberately updated the model configuration. This Agents API path is not a substitute for that validation gate.
+The default remains `gpt-6.1-sol`. The code rejects `TIKVARON_AGENTS_MODEL=gpt-6-astra` unless the repository Actions variable `TIKVARON_ASTRA_VALIDATION_PASSED=true` is also present. Set that validation flag only after PR #5 is merged and its opt-in live Responses API smoke test has succeeded. This second guard prevents the Agents API model variable from silently bypassing the existing validation gate.
 
 The managed session connects to the public OpenAI documentation MCP over HTTP from the OpenAI service and also enables web search. Both tools are inherited by the specialist subagents. No self-hosted executor is required because this review path does not need file or command execution. If a future task uses a self-hosted environment, provision the separate, restricted executor key and `codex exec-server`; never place the application API key inside the agent environment.
 

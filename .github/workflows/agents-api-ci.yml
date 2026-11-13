@@ -3,7 +3,7 @@ name: TIKVARON Agents API — Offline CI
 on:
   pull_request:
   push:
-    branches: [main, master, feat/engineering-intelligence-v1]
+    branches: [main, master, feat/engineering-intelligence-v1, feat/agents-api-engineering-intelligence]
 
 permissions:
   contents: read

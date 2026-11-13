@@ -84,7 +84,7 @@ def _serialize_result(result: object) -> dict[str, object]:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    args = _parsen().parse_args(argv)
+    args = _parser().parse_args(argv)
     try:
         generator = ImageGenerationClient()
         if args.command == "upload":

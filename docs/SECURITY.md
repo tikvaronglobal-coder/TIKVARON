@@ -9,4 +9,9 @@
 - Architecture and incident analysis must use the trusted base checkout, never a PR-head checkout in a privileged workflow.
 - Live validation is read-only and writes only a JSON artifact. It never posts review comments or mutates PR state.
 - The GPT-6 Astra smoke test is a separate manual, opt-in job. It exposes `OPENAI_API_KEY` only to the inference step, disables automatic SDK retries, and does not write credentials or prompts to its result artifact.
+- The optional Responses API tool layer does not run in CI or the standard PR review path. Web search and file search are disabled unless explicitly enabled or configured.
+- The only built-in local functions are read-only. They return a small set of GitHub workflow metadata or parse changed-path labels from an untrusted diff; they do not run shell commands, open diff-supplied paths, write files, or change GitHub state.
+- Tool calls are serialized and limited to four rounds. Unknown function names and invalid arguments fail closed.
+- Remote MCP connections require HTTPS and explicit human approval. Never replace `require_approval="always"` with automatic approval for an unreviewed server.
+- A vector-store ID is configuration, not proof that its contents are safe. Populate vector stores only with approved, access-controlled engineering documents and review their retention and access policies.
 - Store `OPENAI_API_KEY` only as a GitHub Actions repository secret.

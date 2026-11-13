@@ -10,6 +10,10 @@ The complete tested v0.2.0 source, package metadata, tests, and documentation ar
 
 For local use, download the segments and reconstruct the release, or use the workflow artifacts after CI.
 
+## Optional Responses API tools
+
+The optional `tikvaron_engineering.responses_tools` module adds hosted web search, vector-store file search, strict namespaced function calling, deferred tool discovery, and approval-gated remote MCP. External tools are opt-in; the default PR-review path does not automatically use them. See [the tool integration guide](docs/RESPONSES_TOOLING.md) for configuration, examples, and safety limits.
+
 ## GitHub Actions setup
 
 1. Add repository Actions secret `OPENAI_API_KEY` under Settings → Secrets and variables → Actions. Never commit the key or paste it into chat.

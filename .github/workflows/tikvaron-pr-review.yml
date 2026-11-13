@@ -4,6 +4,7 @@ on:
   pull_request_target:
     types: [opened, synchronize, reopened, ready_for_review]
 
+# Analyze diffs through GitHub's API. Never check out or execute PR-head code.
 permissions:
   contents: read
   pull-requests: write
@@ -29,16 +30,15 @@ jobs:
           python-version: "3.12"
       - name: Restore and integrity-check pinned v0.2.0 source release
         run: |
-          mkdir -p .release-cache .tikvaron-release && cat releases/.archive-data/tikvaron-engineering-intelligence-v0.2.0.zip.b64.part-* | base64 --decode > .release-cache/tikvaron-engineering-intelligence-v0.2.0.zip && unzip -t .release-cache/tikvaron-engineering-intelligence-v0.2.0.zip && unzip -q .release-cache/tikvaron-engineering-intelligence-v0.2.0.zip -d .tikvaron-release
+          mkdir -p .release-cache .tikvaron-release
+          cat releases/.archive-data/tikvaron-engineering-intelligence-v0.2.0.zip.b64.part-* | base64 --decode > .release-cache/tikvaron-engineering-intelligence-v0.2.0.zip
+          unzip -t .release-cache/tikvaron-engineering-intelligence-v0.2.0.zip
+          unzip -q .release-cache/tikvaron-engineering-intelligence-v0.2.0.zip -d .tikvaron-release
       - name: Apply validated tracked release overlays
         run: python .github/scripts/apply_release_patches.py .tikvaron-release/tikvaron-engineering-intelligence
       - name: Install TIKVARON reviewer
         working-directory: .tikvaron-release/tikvaron-engineering-intelligence
         run: python -m pip install --upgrade pip && pip install .
-      - name: Require configured OpenAI secret
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: test -n "$OPENAI_API_KEY" || (echo 'Add OPENAI_API_KEY in repository Settings → Secrets and variables → Actions' && exit 1)
       - name: Review pull-request diff and publish advisory comment
         working-directory: .tikvaron-release/tikvaron-engineering-intelligence
         env:
@@ -47,4 +47,9 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_EVENT_PATH: ${{ github.event_path }}
-        run: python -m tikvaron_engineering.github_action
+        run: |
+          if [ -z "$OPENAI_API_KEY" ]; then
+            echo "::warning::OPENAI_API_KEY is not configured; TIKVARON AI review is safely skipped. Add the repository Actions secret to enable reviews."
+            exit 0
+          fi
+          python -m tikvaron_engineering.github_action

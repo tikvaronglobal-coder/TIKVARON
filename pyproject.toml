@@ -12,6 +12,7 @@ dependencies = ["openai>=3.49.0,<4"]
 
 [project.scripts]
 tikvaron-review = "tikvaron_engineering.cli:main"
+tikvaron-agents-review = "tikvaron_engineering.agents_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

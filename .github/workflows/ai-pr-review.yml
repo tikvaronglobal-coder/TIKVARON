@@ -3,13 +3,19 @@ name: TIKVARON AI Pull Request Review
 on:
   pull_request_target:
     types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number to review
+        required: true
+        type: number
 
 permissions:
   contents: read
   pull-requests: write
 
 concurrency:
-  group: tikvaron-ai-pr-review-${{ github.event.pull_request.number }}
+  group: tikvaron-ai-pr-review-${{ github.event.pull_request.number || inputs.pr_number }}
   cancel-in-progress: true
 
 jobs:
@@ -18,11 +24,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      # Check out the trusted base, never the untrusted PR head.
       - name: Check out trusted base revision
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
           persist-credentials: false
 
       - name: Set up Python
@@ -38,17 +43,17 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_NUMBER: ${{ inputs.pr_number || github.event.pull_request.number }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
-          if [[ -z "\${OPENAI_API_KEY:-}" ]]; then
+          if [[ -z "${OPENAI_API_KEY:-}" ]]; then
             echo "::error::Add OPENAI_API_KEY under repository Settings > Secrets and variables > Actions."
             exit 1
           fi
           gh pr diff "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --color never > "$RUNNER_TEMP/pr.diff"
-          python -m tikvaron_engineering.cli \\
-            --diff "$RUNNER_TEMP/pr.diff" \\
+          python -m tikvaron_engineering.cli \
+            --diff "$RUNNER_TEMP/pr.diff" \
             --output "$RUNNER_TEMP/review.md"
-          gh pr review "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \\
+          gh pr review "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
             --comment --body-file "$RUNNER_TEMP/review.md"

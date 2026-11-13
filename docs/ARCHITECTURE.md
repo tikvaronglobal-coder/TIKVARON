@@ -8,7 +8,7 @@ The product is a deterministic-first, evidence-grounded set of agents orchestrat
 - Security: deterministic scanning of added lines, secret redaction before model submission, and risk aggregation.
 - Architecture: Python AST and JavaScript/TypeScript import graph analysis over the trusted base checkout.
 - Dependency: conservative exact-version extraction and read-only OSV advisory lookup.
-- Incident: correlation against reviewed incident records in \`.tikvaron/incidents.json\`.
+- Incident: correlation against reviewed incident records in `.tikvaron/incidents.json`.
 - Documentation: identifies likely documentation gaps associated with changed components.
 - Test Intelligence: converts JUnit XML into machine-readable summaries and CI artifacts.
 - Astra authentication test: a separate manual workflow makes one Responses API request to verify API-key authentication and text inference. It uses low reasoning effort, disables response storage, disables SDK retries, verifies an exact sentinel, and records the model, request ID, and token usage. It is not a PR review and does not run automatically.
@@ -16,13 +16,13 @@ The product is a deterministic-first, evidence-grounded set of agents orchestrat
 
 ## Tool orchestration
 
-The optional runtime lives in \`tikvaron_engineering.responses_tools\`. It uses a strict function-schema namespace named \`engineering\`, exposes trusted workflow metadata and changed-path labels, and executes only its small local read-only allowlist. Function calls are serialized and bounded. Unknown functions, malformed arguments, and exceeded tool-call limits fail closed.
+The optional runtime lives in `tikvaron_engineering.responses_tools`. It uses a strict function-schema namespace named `engineering`, exposes trusted workflow metadata and changed-path labels, and executes only its small local read-only allowlist. Function calls are serialized and bounded. Unknown functions, malformed arguments, and exceeded tool-call limits fail closed.
 
 Web search is opt-in. File search requires an explicitly supplied vector-store ID. Remote MCP requires an HTTPS endpoint and human approval. The helper is installed into the restored release by the tracked deployment overlay; the pinned source ZIP is not modified.
 
 ## Trust boundaries
 
-The privileged \`pull_request_target\` workflow checks out only the trusted base SHA. It requests the PR diff through GitHub's API and never checks out, installs, imports, or executes PR-head code. All PR content is untrusted model input. Changed paths returned by the helper are labels parsed from that input and are never opened or executed.
+The privileged `pull_request_target` workflow checks out only the trusted base SHA. It requests the PR diff through GitHub's API and never checks out, installs, imports, or executes PR-head code. All PR content is untrusted model input. Changed paths returned by the helper are labels parsed from that input and are never opened or executed.
 
 ## Operational behavior
 

@@ -77,6 +77,7 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           TIKVARON_AGENTS_MODEL: ${{ vars.TIKVARON_AGENTS_MODEL }}
           TIKVARON_AGENTS_MAX_SUBAGENTS: ${{ vars.TIKVARON_AGENTS_MAX_SUBAGENTS }}
+          TIKVARON_ASTRA_VALIDATION_PASSED: ${{ vars.TIKVARON_ASTRA_VALIDATION_PASSED }}
           PR_NUMBER: ${{ inputs.pr_number || github.event.pull_request.number }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |

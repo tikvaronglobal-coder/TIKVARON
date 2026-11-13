@@ -48,6 +48,8 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
+          PR_HEAD_SHA="$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json headRefOid --jq '.headRefOid')"
+          echo "PR_HEAD_SHA=$PR_HEAD_SHA" >> "$GITHUB_ENV"
           gh pr diff "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --color never > "$RUNNER_TEMP/pr.diff"
           diff_bytes=$(wc -c < "$RUNNER_TEMP/pr.diff")
           if (( diff_bytes == 0 )); then
@@ -62,6 +64,8 @@ jobs:
       - name: Generate AI review
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          PR_NUMBER: ${{ inputs.pr_number || github.event.pull_request.number }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
           if [[ -z "${OPENAI_API_KEY:-}" ]]; then
@@ -70,7 +74,8 @@ jobs:
           fi
           python -m tikvaron_engineering.cli \
             --diff "$RUNNER_TEMP/pr.diff" \
-            --output "$RUNNER_TEMP/review.md"
+            --output "$RUNNER_TEMP/review.md" \
+            --metrics "$RUNNER_TEMP/review-metrics.json"
 
       - name: Post review
         env:
@@ -81,3 +86,12 @@ jobs:
           set -euo pipefail
           gh pr review "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
             --comment --body-file "$RUNNER_TEMP/review.md"
+
+      - name: Upload review telemetry artifact
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ai-review-telemetry-pr-${{ inputs.pr_number || github.event.pull_request.number }}-run-${{ github.run_id }}
+          path: ${{ runner.temp }}/review-metrics.json
+          retention-days: 30
+          if-no-files-found: ignore

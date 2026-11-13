@@ -1,17 +1,17 @@
 # Responses API tool integration
 
 TIKVARON's optional tool layer is implemented in
-\`.github/scripts/responses_tools.py\` and overlaid into the restored
-\`tikvaron_engineering\` package as \`tikvaron_engineering.responses_tools\`.
+`.github/scripts/responses_tools.py` and overlaid into the restored
+`tikvaron_engineering` package as `tikvaron_engineering.responses_tools`.
 The pinned v0.2.0 source ZIP remains unchanged.
 
 ## Capability mapping
 
 | Responses API capability | TIKVARON engineering use | Default |
 |---|---|---|
-| \`web_search\` | Research current advisories, vendor docs, and API changes | Disabled |
-| \`file_search\` | Retrieve approved internal engineering knowledge from a vector store | Disabled until a vector-store ID is supplied |
-| Namespace functions + \`tool_search\` | Organize read-only repository tools and defer the changed-path helper | Enabled in the optional helper |
+| `web_search` | Research current advisories, vendor docs, and API changes | Disabled |
+| `file_search` | Retrieve approved internal engineering knowledge from a vector store | Disabled until a vector-store ID is supplied |
+| Namespace functions + `tool_search` | Organize read-only repository tools and defer the changed-path helper | Enabled in the optional helper |
 | Strict function calling | Obtain repository metadata and changed paths through validated JSON schemas | Read-only allowlist |
 | Remote MCP | Connect an approved documentation service | Disabled until an HTTPS URL is supplied; approval required |
 
@@ -24,7 +24,7 @@ a new capability.
 The helper is a reusable Python integration. It does not run during CI and is
 not wired into the normal PR-review workflow automatically.
 
-\`\`\`python
+```python
 from openai import OpenAI
 from tikvaron_engineering.responses_tools import run_responses_agent
 
@@ -38,27 +38,27 @@ result = run_responses_agent(
     mcp_server_url=None,   # Set only for an approved HTTPS MCP service.
 )
 print(result)
-\`\`\`
+```
 
-The default model is \`gpt-6.1-sol\`, preserving the existing TIKVARON review
+The default model is `gpt-6.1-sol`, preserving the existing TIKVARON review
 model. Select Astra only after PR #5's manual authentication/inference gate has
 passed and a maintainer intentionally configures it.
 
 ## Tool behavior and controls
 
-- Web search is included only when \`enable_web_search=True\`.
-- File search is included only when a real \`vector_store_id\` is supplied. The
+- Web search is included only when `enable_web_search=True`.
+- File search is included only when a real `vector_store_id` is supplied. The
   repository does not invent or create a vector store for the operator.
-- The \`engineering\` namespace exposes \`get_repository_context\` and a
-  deferred \`list_changed_paths\` function. Both are read-only. The latter
+- The `engineering` namespace exposes `get_repository_context` and a
+  deferred `list_changed_paths` function. Both are read-only. The latter
   parses path labels from the supplied diff; it never opens or executes them.
-- \`tool_search\` lets the model discover the deferred function. The runtime
-  serializes local tool calls with \`parallel_tool_calls=False\`, enforces a
+- `tool_search` lets the model discover the deferred function. The runtime
+  serializes local tool calls with `parallel_tool_calls=False`, enforces a
   four-round ceiling, and fails closed on unknown functions or invalid input.
-- MCP requires an absolute HTTPS URL and uses \`require_approval="always"\`.
-  The helper raises \`ToolApprovalRequired\` rather than silently approving a
+- MCP requires an absolute HTTPS URL and uses `require_approval="always"`.
+  The helper raises `ToolApprovalRequired` rather than silently approving a
   remote tool. A trusted application must handle the approval continuation.
-- Responses are created with \`store=False\`. The caller should disable SDK
+- Responses are created with `store=False`. The caller should disable SDK
   retries for any explicitly metered live run and retain the existing workflow
   approval gates.
 - No GitHub token, OpenAI key, or provider secret is exposed through the

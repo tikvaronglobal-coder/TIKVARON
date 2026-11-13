@@ -6,16 +6,17 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from tikvaron_engineering.agents_api import (
+    DEFAULT_SESSION_SPEND_LIMIT_CENTS,
     MAX_DIFF_BYTES,
     review_pull_request_with_agents,
 )
 
 
 class FakeStream:
-    def __init__(self, events, result):
+    def __init__(self, events, result, session_id="sess_test_123"):
         self.events = events
         self.result = result
-        self.session_id = "sess_test_123"
+        self.session_id = session_id
         self.entered = False
         self.exited = False
 
@@ -58,10 +59,24 @@ class FakeClient:
 
 
 class AgentsApiReviewTests(unittest.TestCase):
-    def make_client(self, *, events=None, output_text="## Review\nNo actionable findings."):
+    def make_client(self, *, events=None, output_text="## Review\nNo actionable findings.", session_id="sess_test_123"):
+        if events is None:
+            events = [
+                SimpleNamespace(
+                    type="agent.session.turn.completed",
+                    turn=SimpleNamespace(subagent_id=None),
+                    session_id=session_id,
+                )
+            ]
         stream = FakeStream(
-            events or [SimpleNamespace(type="agent.session.turn.completed")],
-            SimpleNamespace(output_text=output_text, session_id="sess_test_123"),
+            events,
+            SimpleNamespace(
+                output_text=output_text,
+                session_id=session_id,
+                spend_control=SimpleNamespace(consumed=15, limit=100),
+                usage=SimpleNamespace(input_tokens=100, output_tokens=30, total_tokens=130),
+            ),
+            session_id=session_id,
         )
         return FakeClient(stream), stream
 
@@ -85,12 +100,85 @@ class AgentsApiReviewTests(unittest.TestCase):
         self.assertEqual(kwargs["agent"]["tools"][0]["server_label"], "openai_docs")
         self.assertEqual(kwargs["agent"]["tools"][0]["connection_origin"], "service")
         self.assertEqual(kwargs["agent"]["tools"][1], {"type": "web_search"})
+        self.assertEqual(kwargs["spend_control"], {"limit": DEFAULT_SESSION_SPEND_LIMIT_CENTS})
         self.assertTrue(stream.entered)
         self.assertTrue(stream.exited)
         self.assertEqual(telemetry["session_id"], "sess_test_123")
         self.assertEqual(telemetry["session_cleanup"], "deleted")
-        self.assertEqual(client.sessions.deleted, ["sess_test_123"])
+        self.assertEqual(telemetry["spend_limit_cents"], 100)
+        self.assertEqual(telemetry["spend_control"]["consumed"], 15)
+        self.assertEqual(telemetry["usage"]["total_tokens"], 130)
+        self.assertTrue(telemetry["root_turn_completed"])
         self.assertTrue(telemetry["completed"])
+        self.assertEqual(client.sessions.deleted, ["sess_test_123"])
+
+    def test_subagent_failure_does_not_abort_root_and_is_disclosed(self):
+        events = [
+            SimpleNamespace(
+                type="agent.session.turn.failed",
+                turn=SimpleNamespace(subagent_id="subagent_1"),
+                session_id="sess_test_123",
+            ),
+            SimpleNamespace(
+                type="agent.session.turn.completed",
+                turn=SimpleNamespace(subagent_id=None),
+                session_id="sess_test_123",
+            ),
+        ]
+        client, _ = self.make_client(events=events)
+        telemetry = {}
+
+        result = review_pull_request_with_agents("diff", client=client, telemetry=telemetry)
+
+        self.assertIn("Coverage caveat", result)
+        self.assertIn("1 specialist subagent turn(s) did not complete", result)
+        self.assertEqual(telemetry["subagent_failures"], ["agent.session.turn.failed"])
+        self.assertTrue(telemetry["root_turn_completed"])
+        self.assertEqual(client.sessions.deleted, ["sess_test_123"])
+
+    def test_root_turn_failure_fails_closed_and_deletes_session(self):
+        events = [
+            SimpleNamespace(
+                type="agent.session.turn.failed",
+                turn=SimpleNamespace(subagent_id=None),
+                session_id="sess_test_123",
+            )
+        ]
+        client, stream = self.make_client(events=events)
+        telemetry = {}
+
+        with self.assertRaisesRegex(RuntimeError, "root turn did not complete"):
+            review_pull_request_with_agents("diff", client=client, telemetry=telemetry)
+
+        self.assertTrue(stream.exited)
+        self.assertEqual(client.sessions.deleted, ["sess_test_123"])
+        self.assertEqual(telemetry["failure_type"], "RuntimeError")
+        self.assertFalse(telemetry["completed"])
+
+    def test_stream_close_before_root_completion_fails_closed(self):
+        events = [SimpleNamespace(type="agent.session.idle", session_id="sess_test_123")]
+        client, _ = self.make_client(events=events)
+        telemetry = {}
+
+        with self.assertRaisesRegex(RuntimeError, "before the root turn completed"):
+            review_pull_request_with_agents("diff", client=client, telemetry=telemetry)
+
+        self.assertEqual(client.sessions.deleted, ["sess_test_123"])
+        self.assertFalse(telemetry["root_turn_completed"])
+
+    def test_session_id_from_event_is_used_for_cleanup(self):
+        events = [
+            SimpleNamespace(
+                type="agent.session.turn.completed",
+                turn=SimpleNamespace(subagent_id=None),
+                session_id="sess_from_event",
+            )
+        ]
+        client, _ = self.make_client(events=events, session_id=None)
+
+        review_pull_request_with_agents("diff", client=client)
+
+        self.assertEqual(client.sessions.deleted, ["sess_from_event"])
 
     def test_empty_diff_is_rejected_before_session_creation(self):
         client, _ = self.make_client()
@@ -104,11 +192,12 @@ class AgentsApiReviewTests(unittest.TestCase):
             review_pull_request_with_agents("x" * (MAX_DIFF_BYTES + 1), client=client)
         self.assertIsNone(client.sessions.kwargs)
 
-    def test_failure_event_fails_closed(self):
-        client, stream = self.make_client(events=[{"type": "agent.session.turn.failed"}])
-        with self.assertRaisesRegex(RuntimeError, "turn.failed"):
+    def test_failure_lifecycle_event_fails_closed(self):
+        client, _ = self.make_client(
+            events=[SimpleNamespace(type="agent.session.environment.failed", session_id="sess_test_123")]
+        )
+        with self.assertRaisesRegex(RuntimeError, "environment.failed"):
             review_pull_request_with_agents("diff", client=client)
-        self.assertTrue(stream.exited)
         self.assertEqual(client.sessions.deleted, ["sess_test_123"])
 
     def test_blank_final_output_is_rejected_and_session_is_deleted(self):
@@ -124,6 +213,18 @@ class AgentsApiReviewTests(unittest.TestCase):
             review_pull_request_with_agents("diff", client=client, telemetry=telemetry)
         self.assertEqual(client.sessions.deleted, [])
         self.assertEqual(telemetry["session_cleanup"], "retained_by_configuration")
+
+    def test_session_spend_limit_can_be_set_and_is_validated(self):
+        client, _ = self.make_client()
+        with patch.dict(os.environ, {"TIKVARON_AGENTS_SESSION_SPEND_LIMIT_CENTS": "250"}):
+            review_pull_request_with_agents("diff", client=client)
+        self.assertEqual(client.sessions.kwargs["spend_control"], {"limit": 250})
+
+        client, _ = self.make_client()
+        with patch.dict(os.environ, {"TIKVARON_AGENTS_SESSION_SPEND_LIMIT_CENTS": "0"}):
+            with self.assertRaisesRegex(ValueError, "between 1 and 10000"):
+                review_pull_request_with_agents("diff", client=client)
+        self.assertIsNone(client.sessions.kwargs)
 
     def test_astra_model_is_blocked_until_pr5_gate_is_explicitly_passed(self):
         client, _ = self.make_client()

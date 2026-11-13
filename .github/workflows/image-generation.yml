@@ -1,0 +1,112 @@
+name: TIKVARON Image Generation — CI and Live Validation
+
+on:
+  pull_request:
+    paths:
+      - "packages/tikvaron-image-generation/**"
+      - ".github/workflows/image-generation.yml"
+  push:
+    branches: [main, master]
+    paths:
+      - "packages/tikvaron-image-generation/**"
+      - ".github/workflows/image-generation.yml"
+  workflow_dispatch:
+    inputs:
+      run_live_smoke:
+        description: Send one billable OpenAI image-generation smoke-test request
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Package tests (offline)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Restore service implementation and tests
+        working-directory: packages/tikvaron-image-generation
+        run: tar -xJf core-sources.tar.xz
+      - name: Apply validated CLI parser correction
+        working-directory: packages/tikvaron-image-generation
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("src/tikvaron_image_generation/cli.py")
+          source = path.read_text(encoding="utf-8")
+          before = 'respond = commands.add_parser(respond, help="Generate or refine using the Responses API")'
+          after = 'respond = commands.add_parser("respond", help="Generate or refine using the Responses API")'
+          if source.count(before) != 1:
+              raise SystemExit("Expected exactly one known CLI parser defect; refusing an unsafe patch")
+          path.write_text(source.replace(before, after, 1), encoding="utf-8")
+          PY
+      - name: Install component and development tools
+        working-directory: packages/tikvaron-image-generation
+        run: python -m pip install --upgrade pip && pip install -e ".[dev]"
+      - name: Compile sources
+        working-directory: packages/tikvaron-image-generation
+        run: python -m compileall -q src scripts tests
+      - name: Run offline unit tests
+        working-directory: packages/tikvaron-image-generation
+        run: pytest -q
+      - name: Run Ruff lint
+        working-directory: packages/tikvaron-image-generation
+        run: ruff check .
+
+  live-smoke:
+    name: Opt-in billable image-generation smoke test
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_live_smoke }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Restore service implementation
+        working-directory: packages/tikvaron-image-generation
+        run: tar -xJf core-sources.tar.xz
+      - name: Apply validated CLI parser correction
+        working-directory: packages/tikvaron-image-generation
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("src/tikvaron_image_generation/cli.py")
+          source = path.read_text(encoding="utf-8")
+          before = 'respond = commands.add_parser(respond, help="Generate or refine using the Responses API")'
+          after = 'respond = commands.add_parser("respond", help="Generate or refine using the Responses API")'
+          if source.count(before) != 1:
+              raise SystemExit("Expected exactly one known CLI parser defect; refusing an unsafe patch")
+          path.write_text(source.replace(before, after, 1), encoding="utf-8")
+          PY
+      - name: Install component
+        working-directory: packages/tikvaron-image-generation
+        run: python -m pip install --upgrade pip && pip install .
+      - name: Run one live image-generation request
+        working-directory: packages/tikvaron-image-generation
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          TIKVARON_IMAGE_MODEL: ${{ vars.TIKVARON_IMAGE_MODEL }}
+          TIKVARON_IMAGE_SMOKE_OUTPUT: artifacts/tikvaron-image-smoke.png
+        run: python scripts/live_smoke.py
+      - name: Upload generated smoke image
+        if: success()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: tikvaron-image-smoke-${{ github.run_id }}
+          path: packages/tikvaron-image-generation/artifacts/tikvaron-image-smoke.png
+          if-no-files-found: error
+          retention-days: 3

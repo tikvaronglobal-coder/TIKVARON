@@ -49,9 +49,9 @@ Ultrafast is a latency-oriented service tier and may have different rate limits 
 
 1. In the repository, open **Settings → Secrets and variables → Actions**.
 2. Add a repository secret named **OPENAI_API_KEY** containing the OpenAI API key. Do not commit the key to the repository or put it in workflow YAML.
-3. Open or update a pull request. The workflow runs on opened, synchronized, reopened, and ready-for-review events and posts a review comment.
+3. Add the `ai-review` label to a pull request to authorize a paid review, or use the workflow's manual dispatch with a PR number. This label gate prevents arbitrary public PR updates from repeatedly triggering billed model calls.
 
-For security, the workflow uses pull_request_target so the workflow definition comes from the trusted base branch. It checks out only the PR base revision and retrieves the proposed diff through GitHub CLI; it never checks out or executes the PR head. This is a deliberate security boundary: do not change the checkout ref to the PR head, run scripts from the diff, or otherwise execute untrusted PR content while repository secrets are available. Review any change to this workflow security model carefully.
+For security, the workflow uses pull_request_target so the workflow definition comes from the trusted base branch. It checks out only the PR base revision and retrieves the proposed diff through GitHub CLI; it never checks out or executes the PR head. Paid reviews require a maintainer-applied `ai-review` label or an authorized manual dispatch. The diff is capped at 200 KB. GitHub Actions are pinned to immutable release commit SHAs. Do not change the checkout ref to the PR head, run scripts from the diff, remove the approval gate, or otherwise execute untrusted PR content while repository secrets are available. Review any change to this workflow security model carefully.
 
 ## Tests
 

@@ -2,9 +2,13 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from responses_tools import (
     ToolApprovalRequired,
@@ -101,7 +105,6 @@ class ResponsesToolsTests(unittest.TestCase):
 
     def test_repository_context_exposes_only_workflow_metadata(self):
         final = SimpleNamespace(id="resp_final", output=[], output_text="Context loaded.")
-        client = FakeClient([final])
         with patch.dict(
             os.environ,
             {
@@ -112,7 +115,6 @@ class ResponsesToolsTests(unittest.TestCase):
             },
             clear=True,
         ):
-            # A function result is produced only after an explicit model tool call.
             first = SimpleNamespace(
                 id="resp_first",
                 output=[

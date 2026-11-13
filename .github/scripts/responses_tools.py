@@ -80,7 +80,7 @@ def build_responses_tools(
     if enable_web_search:
         tools.append({"type": "web_search"})
 
-    if vector_store_id:
+    if vector_store_id is not None:
         if not isinstance(vector_store_id, str) or not vector_store_id.strip():
             raise ValueError("vector_store_id must be a non-empty string")
         tools.append({

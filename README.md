@@ -43,6 +43,7 @@ The Agents API request is made only when the Agents CLI or the explicitly gated 
 | `TIKVARON_AGENTS_MODEL` | `gpt-6.1-sol` | Model for managed Agents API review sessions |
 | `TIKVARON_AGENTS_MAX_SUBAGENTS` | `3` | Concurrent specialist subagent limit; valid range is 1–4 |
 | `TIKVARON_AGENTS_KEEP_SESSIONS` | `false` | Set to `true` only when retaining completed sessions for debugging is required |
+| `TIKVARON_AGENTS_SESSION_SPEND_LIMIT_CENTS` | `100` | Per-session Agents API spend-control limit in USD cents; allowed range is 1–10,000 cents. The API describes consumption as best-effort, not a billing guarantee. |
 | `TIKVARON_ASTRA_VALIDATION_PASSED` | unset | Must be explicitly set to `true` after PR #5's live Astra smoke test succeeds before this integration accepts `gpt-6-astra` |
 | `OPENAI_API_KEY` | — | OpenAI application key for Agents API requests |
 
@@ -56,6 +57,8 @@ The managed session connects to the public OpenAI documentation MCP over HTTP fr
 - `agents-api-pr-review.yml` does not run on PR open or synchronize events. A maintainer must apply the separate `agents-review` label, or manually dispatch the workflow and set `confirm_paid_run=true`.
 - The workflow fetches PR metadata and diff through GitHub CLI, enforces a 200 KB diff limit, and checks out only the trusted base revision. It never checks out or executes PR-head code.
 - The workflow posts a normal advisory PR comment. It does not approve, request changes, merge, or alter repository settings.
+- Each Agents API session requests a spend-control limit, defaulting to 100 USD cents ($1) and configurable up to 10,000 cents ($100). OpenAI describes this as best-effort consumption control, so also configure project-level spend limits and alerts.
+- The stream handler only fails the overall review on root-turn/lifecycle errors, recognizes subagent failures separately, flags incomplete specialist coverage in the review, and rejects a stream that ends before root completion.
 - The Agents API client disables automatic SDK retries for session creation to reduce the risk of unintentionally creating duplicate billable sessions after ambiguous failures.
 - Completed sessions are deleted by default after the final review is collected. Set `TIKVARON_AGENTS_KEEP_SESSIONS=true` only when retaining a session for debugging is required.
 - Telemetry artifacts contain session IDs, cleanup status, model, event-type names, diff size, PR/workflow identifiers, and latency. They intentionally do not store source diff contents or raw event payloads.
@@ -73,7 +76,7 @@ python -m compileall -q src tests
 python -m unittest discover -s tests -v
 ~~~
 
-Tests inject a fake client and verify session configuration, specialist delegation settings, MCP/web-search configuration, event failure handling, result extraction, input limits, and session-cleanup behavior. They do not verify API credentials, model availability, actual subagent quality, MCP uptime, latency, or live cost.
+Tests inject a fake client and verify session configuration, specialist delegation settings, MCP/web-search configuration, root versus subagent event handling, truncated streams, spend-control validation, usage telemetry, result extraction, input limits, and session-cleanup behavior. They do not verify API credentials, model availability, actual subagent quality, MCP uptime, latency, or live cost.
 
 ## Existing Astra gate
 

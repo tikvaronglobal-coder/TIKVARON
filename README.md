@@ -23,7 +23,7 @@ export OPENAI_API_KEY="your-api-key"
 Run a multi-agent review against a saved unified diff:
 
 ~~~bash
-python -m tikvaron_engineering.cli --diff ./pr.diff --output ./review.md
+python -m tikvaron_engineering.cli --diff ./pr.diff --output ./review.md --metrics ./review-metrics.json
 ~~~
 
 Use the single-agent fast path from Python:
@@ -61,4 +61,6 @@ Run the offline unit tests:
 python -m unittest discover -s tests -v
 ~~~
 
-The tests mock the OpenAI client. They verify SDK routing and result extraction but do not verify live API credentials, model access, service-tier entitlement, or actual review quality.
+The tests mock the OpenAI client. They verify SDK routing, root-agent result extraction, and provider-usage capture but do not verify live API credentials, model access, service-tier entitlement, or actual review quality.
+
+The CLI can write a telemetry JSON file containing the response ID, model, provider-returned usage record, workflow/PR identifiers when present, diff size, and request latency. GitHub Actions retains this file as a 30-day artifact. Calculate monetary cost only from the captured token details and the applicable official model rates for the request date; if usage or applicable rates are unavailable, report cost as unmeasured rather than estimating it.

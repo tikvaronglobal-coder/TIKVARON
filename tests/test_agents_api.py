@@ -15,6 +15,7 @@ class FakeStream:
     def __init__(self, events, result):
         self.events = events
         self.result = result
+        self.session_id = "sess_test_123"
         self.entered = False
         self.exited = False
 
@@ -40,10 +41,14 @@ class FakeSessions:
     def __init__(self, stream):
         self.stream = stream
         self.kwargs = None
+        self.deleted = []
 
     def create(self, **kwargs):
         self.kwargs = kwargs
         return self.stream
+
+    def delete(self, session_id):
+        self.deleted.append(session_id)
 
 
 class FakeClient:
@@ -83,6 +88,8 @@ class AgentsApiReviewTests(unittest.TestCase):
         self.assertTrue(stream.entered)
         self.assertTrue(stream.exited)
         self.assertEqual(telemetry["session_id"], "sess_test_123")
+        self.assertEqual(telemetry["session_cleanup"], "deleted")
+        self.assertEqual(client.sessions.deleted, ["sess_test_123"])
         self.assertTrue(telemetry["completed"])
 
     def test_empty_diff_is_rejected_before_session_creation(self):
@@ -102,11 +109,21 @@ class AgentsApiReviewTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "turn.failed"):
             review_pull_request_with_agents("diff", client=client)
         self.assertTrue(stream.exited)
+        self.assertEqual(client.sessions.deleted, ["sess_test_123"])
 
-    def test_blank_final_output_is_rejected(self):
+    def test_blank_final_output_is_rejected_and_session_is_deleted(self):
         client, _ = self.make_client(output_text="  ")
         with self.assertRaisesRegex(RuntimeError, "without a final review"):
             review_pull_request_with_agents("diff", client=client)
+        self.assertEqual(client.sessions.deleted, ["sess_test_123"])
+
+    def test_session_retention_can_be_enabled_for_debugging(self):
+        client, _ = self.make_client()
+        with patch.dict(os.environ, {"TIKVARON_AGENTS_KEEP_SESSIONS": "true"}):
+            telemetry = {}
+            review_pull_request_with_agents("diff", client=client, telemetry=telemetry)
+        self.assertEqual(client.sessions.deleted, [])
+        self.assertEqual(telemetry["session_cleanup"], "retained_by_configuration")
 
     def test_subagent_limit_is_validated_before_session_creation(self):
         client, _ = self.make_client()

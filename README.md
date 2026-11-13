@@ -17,6 +17,6 @@ For local use, download the segments and reconstruct the release, or use the wor
 3. Merge the deployment pull request after reviewing it. The PR review workflow becomes active after it is on the default branch.
 4. Run **Actions → TIKVARON Engineering Intelligence — Live Validation** manually. Opt into the billable OpenAI smoke test and/or provide exactly three comma-separated existing open PR numbers for the read-only pilot.
 
-The PR review workflow uses `pull_request_target` but checks out only the trusted base commit and obtains PR changes through the GitHub API. It never checks out or executes contributor-controlled PR code. Reviews are advisory; no merge gate is enabled.
+The PR review workflow uses `pull_request_target` but checks out only the trusted base commit and obtains PR changes through the GitHub API. It never checks out or executes contributor-controlled PR code. The proposed hardened workflow requires a maintainer to apply the `ai-review` label before a billable review can run; see the security follow-up pull request. Reviews are advisory; no merge gate is enabled.
 
 See [`DEPLOYMENT.md`](DEPLOYMENT.md), [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/SECURITY.md`](docs/SECURITY.md), and [`docs/EVALUATION.md`](docs/EVALUATION.md).

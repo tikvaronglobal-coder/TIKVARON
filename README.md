@@ -42,6 +42,7 @@ The Agents API request is made only when the Agents CLI or the explicitly gated 
 |---|---|---|
 | `TIKVARON_AGENTS_MODEL` | `gpt-6.1-sol` | Model for managed Agents API review sessions |
 | `TIKVARON_AGENTS_MAX_SUBAGENTS` | `3` | Concurrent specialist subagent limit; valid range is 1–4 |
+| `TIKVARON_AGENTS_KEEP_SESSIONS` | `false` | Set to `true` only when retaining completed sessions for debugging is required |
 | `OPENAI_API_KEY` | — | OpenAI application key for Agents API requests |
 
 The default remains `gpt-6.1-sol`. Do not route this integration to `gpt-6-astra` until PR #5's opt-in live Responses API smoke test has passed and the maintainer has deliberately updated the model configuration. This Agents API path is not a substitute for that validation gate.
@@ -55,11 +56,12 @@ The managed session connects to the public OpenAI documentation MCP over HTTP fr
 - The workflow fetches PR metadata and diff through GitHub CLI, enforces a 200 KB diff limit, and checks out only the trusted base revision. It never checks out or executes PR-head code.
 - The workflow posts a normal advisory PR comment. It does not approve, request changes, merge, or alter repository settings.
 - The Agents API client disables automatic SDK retries for session creation to reduce the risk of unintentionally creating duplicate billable sessions after ambiguous failures.
-- Telemetry artifacts contain session IDs, model, event-type names, diff size, PR/workflow identifiers, and latency. They intentionally do not store source diff contents or raw event payloads.
+- Completed sessions are deleted by default after the final review is collected. Set `TIKVARON_AGENTS_KEEP_SESSIONS=true` only when retaining a session for debugging is required.
+- Telemetry artifacts contain session IDs, cleanup status, model, event-type names, diff size, PR/workflow identifiers, and latency. They intentionally do not store source diff contents or raw event payloads.
 
 The Agents API requires an application key with `api.agents.read`, `api.agents.write`, and `api.responses.write`. Keep the key in GitHub Actions Secrets, not repository variables or source files.
 
-**Data handling:** Agents API sessions are managed and persisted by OpenAI. The current Agents API documentation states that data residency is available only in the United States and that the API does not support Zero Data Retention. Review repository/IP handling requirements and applicable data policies before enabling paid PR reviews. A `type: none` environment prevents code execution but does not change the API's session retention or data-residency behavior.
+**Data handling:** Agents API sessions are managed and persisted by OpenAI. The current Agents API documentation states that data residency is available only in the United States and that the API does not support Zero Data Retention. Review repository/IP handling requirements and applicable data policies before enabling paid PR reviews. Completed review sessions are deleted by default, but this does not make the service ZDR-eligible or change data residency; a `type: none` environment prevents code execution, not server-side processing or retention.
 
 ## Tests
 
@@ -70,7 +72,7 @@ python -m compileall -q src tests
 python -m unittest discover -s tests -v
 ~~~
 
-Tests inject a fake client and verify session configuration, specialist delegation settings, MCP/web-search configuration, event failure handling, result extraction, and input limits. They do not verify API credentials, model availability, actual subagent quality, MCP uptime, latency, or live cost.
+Tests inject a fake client and verify session configuration, specialist delegation settings, MCP/web-search configuration, event failure handling, result extraction, input limits, and session-cleanup behavior. They do not verify API credentials, model availability, actual subagent quality, MCP uptime, latency, or live cost.
 
 ## Existing Astra gate
 

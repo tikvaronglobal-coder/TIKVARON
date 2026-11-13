@@ -11,7 +11,7 @@ The product is a deterministic-first, evidence-grounded set of agents orchestrat
 - Incident: correlation against reviewed incident records in `.tikvaron/incidents.json`.
 - Documentation: identifies likely documentation gaps associated with changed components.
 - Test Intelligence: converts JUnit XML into machine-readable summaries and CI artifacts.
-- Astra authentication test: a separate manual workflow makes one Chat Completions request to verify API-key authentication and text inference. It is not a PR review and does not run automatically.
+- Astra authentication test: a separate manual workflow makes one Responses API request to verify API-key authentication and text inference. It uses low reasoning effort, disables response storage, disables SDK retries, verifies an exact sentinel, and records the model, request ID, and token usage. It is not a PR review and does not run automatically.
 
 ## Trust boundaries
 

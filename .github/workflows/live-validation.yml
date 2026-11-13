@@ -9,7 +9,7 @@ on:
         type: boolean
         default: false
       run_astra_smoke:
-        description: Send one billable GPT-6 Astra Chat Completions request to verify authentication and inference
+        description: Send one billable GPT-6 Astra Responses API request to verify authentication and inference
         required: true
         type: boolean
         default: false
@@ -78,7 +78,7 @@ jobs:
           python-version: "3.12"
       - name: Install the official OpenAI Python SDK
         run: python -m pip install --upgrade openai
-      - name: Run one GPT-6 Astra Chat Completions authentication and inference request
+      - name: Run one GPT-6 Astra Responses API authentication and inference request
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           TIKVARON_ASTRA_MODEL: ${{ inputs.astra_model }}

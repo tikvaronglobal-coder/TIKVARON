@@ -1,7 +1,7 @@
 """Run one explicit GPT-6 Astra authentication and inference smoke test.
 
 This script is invoked only by the manually dispatched, opt-in workflow. It
-uses Chat Completions without tools, makes a single request (SDK retries are
+uses the Responses API without tools, makes a single request (SDK retries are
 disabled), and never prints the API key or request headers.
 """
 from __future__ import annotations
@@ -22,7 +22,7 @@ def write_result(result: dict[str, object]) -> None:
     if output_path:
         path = Path(output_path)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(result, indent=2) + "\\n", encoding="utf-8")
+        path.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     stream = sys.stdout if result.get("status") == "passed" else sys.stderr
     print(json.dumps(result, indent=2), file=stream)
 
@@ -45,25 +45,21 @@ def main() -> int:
 
     client = OpenAI(api_key=api_key, timeout=60.0, max_retries=0)
     try:
-        completion = client.chat.completions.create(
+        response = client.responses.create(
             model=model,
-            messages=[
-                {
-                    "role": "user",
-                    "content": (
-                        "Reply with exactly this token and no other text: "
-                        f"{EXPECTED_OUTPUT}"
-                    ),
-                }
-            ],
-            reasoning_effort=reasoning_effort,
-            max_completion_tokens=64,
+            input=(
+                "Reply with exactly this token and no other text: "
+                f"{EXPECTED_OUTPUT}"
+            ),
+            reasoning={"effort": reasoning_effort},
+            max_output_tokens=64,
+            store=False,
         )
     except APIError as exc:
         write_result({
             "status": "failed",
             "model_requested": model,
-            "endpoint": "v1/chat/completions",
+            "endpoint": "v1/responses",
             "error_type": type(exc).__name__,
             "http_status": getattr(exc, "status_code", None),
             "request_id": getattr(exc, "request_id", None),
@@ -74,20 +70,18 @@ def main() -> int:
         write_result({
             "status": "failed",
             "model_requested": model,
-            "endpoint": "v1/chat/completions",
+            "endpoint": "v1/responses",
             "error_type": type(exc).__name__,
             "reason": "Unexpected smoke-test error; no credential data was logged.",
         })
         return 1
 
-    choices = getattr(completion, "choices", None) or []
-    message = choices[0].message if choices else None
-    content = (getattr(message, "content", None) or "").strip()
-    request_id = getattr(completion, "_request_id", None)
-    usage = getattr(completion, "usage", None)
+    content = (getattr(response, "output_text", None) or "").strip()
+    request_id = getattr(response, "_request_id", None)
+    usage = getattr(response, "usage", None)
     usage_record = {
-        "input_tokens": getattr(usage, "prompt_tokens", None),
-        "output_tokens": getattr(usage, "completion_tokens", None),
+        "input_tokens": getattr(usage, "input_tokens", None),
+        "output_tokens": getattr(usage, "output_tokens", None),
         "total_tokens": getattr(usage, "total_tokens", None),
     }
 
@@ -95,8 +89,8 @@ def main() -> int:
         write_result({
             "status": "failed",
             "model_requested": model,
-            "model_returned": getattr(completion, "model", None),
-            "endpoint": "v1/chat/completions",
+            "model_returned": getattr(response, "model", None),
+            "endpoint": "v1/responses",
             "request_id": request_id,
             "usage": usage_record,
             "reason": "The API returned a response, but the exact inference sentinel did not match.",
@@ -106,8 +100,8 @@ def main() -> int:
     write_result({
         "status": "passed",
         "model_requested": model,
-        "model_returned": getattr(completion, "model", None),
-        "endpoint": "v1/chat/completions",
+        "model_returned": getattr(response, "model", None),
+        "endpoint": "v1/responses",
         "request_id": request_id,
         "reasoning_effort": reasoning_effort,
         "usage": usage_record,

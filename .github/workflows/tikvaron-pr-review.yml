@@ -50,7 +50,8 @@ jobs:
         working-directory: .tikvaron-release/tikvaron-engineering-intelligence
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          TIKVARON_OPENAI_MODEL: ${{ vars.TIKVARON_OPENAI_MODEL }}
+          # A validated Astra model override takes precedence; otherwise preserve the existing model setting.
+          TIKVARON_OPENAI_MODEL: ${{ vars.TIKVARON_ASTRA_MODEL || vars.TIKVARON_OPENAI_MODEL }}
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_EVENT_PATH: ${{ github.event_path }}

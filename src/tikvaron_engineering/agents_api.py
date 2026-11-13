@@ -69,7 +69,15 @@ def _event_type(event: Any) -> str | None:
 
 def _agent_model() -> str:
     value = os.getenv("TIKVARON_AGENTS_MODEL", DEFAULT_AGENTS_MODEL).strip()
-    return value or DEFAULT_AGENTS_MODEL
+    value = value or DEFAULT_AGENTS_MODEL
+    if value == "gpt-6-astra":
+        validated = os.getenv("TIKVARON_ASTRA_VALIDATION_PASSED", "").strip().lower()
+        if validated not in {"1", "true", "yes"}:
+            raise ValueError(
+                "gpt-6-astra is locked for the Agents API until PR #5's live "
+                "Responses API smoke test has passed and TIKVARON_ASTRA_VALIDATION_PASSED=true"
+            )
+    return value
 
 
 def _max_subagents() -> int:

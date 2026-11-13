@@ -1,12 +1,14 @@
 # TIKVARON Engineering Intelligence System
 
-TIKVARON Engineering Intelligence starts with an AI-assisted pull-request review engine and a separate low-latency Responses API utility.
+TIKVARON Engineering Intelligence starts with an AI-assisted pull-request review engine and a separate low-latency Responses API utility. The OpenAI Agents API integration adds durable managed sessions, specialist subagents, documentation MCP access, web research, streamed progress, and session-level telemetry as a separate review path.
 
 ## Components
 
-- **Multi-agent PR reviewer**: uses the OpenAI beta Responses endpoint to run specialist passes for correctness, security, and missing tests, then returns the root agent's reconciled review.
-- **Fast single-agent Responses helper**: uses the standard Responses endpoint with the Ultrafast service tier for latency-sensitive, non-review tasks.
-- **GitHub Actions integration**: reviews pull requests and posts the result as a PR review comment.
+- **Responses API reviewer**: the existing multi-agent correctness, security, and test-coverage review path.
+- **Agents API reviewer**: an independent managed session that coordinates the same specialist scopes, consults the OpenAI documentation MCP and web search, and reconciles one advisory review.
+- **GitHub Actions integration**: separate workflows for offline tests and explicitly authorized Agents API reviews.
+
+The Agents API reviewer uses `environment: {"type": "none"}`. It receives a bounded PR diff and has no shell or repository execution environment. It does not check out PR-head code, execute code from a diff, approve or merge PRs, or publish anything other than an advisory comment.
 
 ## Local setup
 
@@ -20,47 +22,62 @@ python -m pip install -e .
 export OPENAI_API_KEY="your-api-key"
 ~~~
 
-Run a multi-agent review against a saved unified diff:
+Run the existing Responses API review:
 
 ~~~bash
 python -m tikvaron_engineering.cli --diff ./pr.diff --output ./review.md --metrics ./review-metrics.json
 ~~~
 
-Use the single-agent fast path from Python:
+Run the separate Agents API review:
 
-~~~python
-from tikvaron_engineering import run_fast_response
-
-print(run_fast_response("Explain why the sky is blue in one sentence."))
+~~~bash
+python -m tikvaron_engineering.agents_cli --diff ./pr.diff --output ./agents-review.md --metrics ./agents-review-metrics.json
 ~~~
 
-## Configuration
+The Agents API request is made only when the Agents CLI or the explicitly gated GitHub Actions workflow is invoked.
+
+## Agents API configuration
 
 | Environment variable | Default | Purpose |
 |---|---|---|
-| OPENAI_API_KEY | — | OpenAI API credential |
-| TIKVARON_REVIEW_MODEL | gpt-6.1-sol | Model for multi-agent PR review |
-| TIKVARON_FAST_MODEL | gpt-6-astra | Model for ordinary Responses requests |
-| TIKVARON_FAST_SERVICE_TIER | ultrafast | Service tier for the fast path |
+| `TIKVARON_AGENTS_MODEL` | `gpt-6.1-sol` | Model for managed Agents API review sessions |
+| `TIKVARON_AGENTS_MAX_SUBAGENTS` | `3` | Concurrent specialist subagent limit; valid range is 1–4 |
+| `TIKVARON_AGENTS_KEEP_SESSIONS` | `false` | Set to `true` only when retaining completed sessions for debugging is required |
+| `TIKVARON_AGENTS_SESSION_SPEND_LIMIT_CENTS` | `100` | Per-session Agents API spend-control limit in USD cents; allowed range is 1–10,000 cents. The API describes consumption as best-effort, not a billing guarantee. |
+| `TIKVARON_ASTRA_VALIDATION_PASSED` | unset | Must be explicitly set to `true` after PR #5's live Astra smoke test succeeds before this integration accepts `gpt-6-astra` |
+| `OPENAI_API_KEY` | — | OpenAI application key for Agents API requests |
 
-Ultrafast is a latency-oriented service tier and may have different rate limits and pricing from the standard tier. Use it only where the latency benefit is worth the cost. The multi-agent review uses the responses_multi_agent=v1 beta capability.
+The default remains `gpt-6.1-sol`. The code rejects `TIKVARON_AGENTS_MODEL=gpt-6-astra` unless the repository Actions variable `TIKVARON_ASTRA_VALIDATION_PASSED=true` is also present. Set that validation flag only after PR #5 is merged and its opt-in live Responses API smoke test has succeeded. This second guard prevents the Agents API model variable from silently bypassing the existing validation gate.
 
-## GitHub Actions setup
+The managed session connects to the public OpenAI documentation MCP over HTTP from the OpenAI service and also enables web search. Both tools are inherited by the specialist subagents. No self-hosted executor is required because this review path does not need file or command execution. If a future task uses a self-hosted environment, provision the separate, restricted executor key and `codex exec-server`; never place the application API key inside the agent environment.
 
-1. In the repository, open **Settings → Secrets and variables → Actions**.
-2. Add a repository secret named **OPENAI_API_KEY** containing the OpenAI API key. Do not commit the key to the repository or put it in workflow YAML.
-3. Add the `ai-review` label to a pull request to authorize a paid review, or use the workflow's manual dispatch with a PR number. This label gate prevents arbitrary public PR updates from repeatedly triggering billed model calls.
+## GitHub Actions and spend control
 
-For security, the workflow uses pull_request_target so the workflow definition comes from the trusted base branch. It checks out only the PR base revision and retrieves the proposed diff through GitHub CLI; it never checks out or executes the PR head. Paid reviews require a maintainer-applied `ai-review` label or an authorized manual dispatch. The diff is capped at 200 KB. GitHub Actions are pinned to immutable release commit SHAs. Do not change the checkout ref to the PR head, run scripts from the diff, remove the approval gate, or otherwise execute untrusted PR content while repository secrets are available. Review any change to this workflow security model carefully.
+- `agents-api-ci.yml` runs compilation and mocked unit tests only. It does not need `OPENAI_API_KEY` and makes no OpenAI API request.
+- `agents-api-pr-review.yml` does not run on PR open or synchronize events. A maintainer must apply the separate `agents-review` label, or manually dispatch the workflow and set `confirm_paid_run=true`.
+- The workflow fetches PR metadata and diff through GitHub CLI, enforces a 200 KB diff limit, and checks out only the trusted base revision. It never checks out or executes PR-head code.
+- The workflow posts a normal advisory PR comment. It does not approve, request changes, merge, or alter repository settings.
+- Each Agents API session requests a spend-control limit, defaulting to 100 USD cents ($1) and configurable up to 10,000 cents ($100). OpenAI describes this as best-effort consumption control, so also configure project-level spend limits and alerts.
+- The stream handler only fails the overall review on root-turn/lifecycle errors, recognizes subagent failures separately, flags incomplete specialist coverage in the review, and rejects a stream that ends before root completion.
+- The Agents API client disables automatic SDK retries for session creation to reduce the risk of unintentionally creating duplicate billable sessions after ambiguous failures.
+- Completed sessions are deleted by default after the final review is collected. Set `TIKVARON_AGENTS_KEEP_SESSIONS=true` only when retaining a session for debugging is required.
+- Telemetry artifacts contain session IDs, cleanup status, model, event-type names, diff size, PR/workflow identifiers, and latency. They intentionally do not store source diff contents or raw event payloads.
+
+The Agents API requires an application key with `api.agents.read`, `api.agents.write`, and `api.responses.write`. Keep the key in GitHub Actions Secrets, not repository variables or source files.
+
+**Data handling:** Agents API sessions are managed and persisted by OpenAI. The current Agents API documentation states that data residency is available only in the United States and that the API does not support Zero Data Retention. Review repository/IP handling requirements and applicable data policies before enabling paid PR reviews. Completed review sessions are deleted by default, but this does not make the service ZDR-eligible or change data residency; a `type: none` environment prevents code execution, not server-side processing or retention.
 
 ## Tests
 
-Run the offline unit tests:
+Run the offline suite:
 
 ~~~bash
+python -m compileall -q src tests
 python -m unittest discover -s tests -v
 ~~~
 
-The tests mock the OpenAI client. They verify SDK routing, root-agent result extraction, and provider-usage capture but do not verify live API credentials, model access, service-tier entitlement, or actual review quality.
+Tests inject a fake client and verify session configuration, specialist delegation settings, MCP/web-search configuration, root versus subagent event handling, truncated streams, spend-control validation, usage telemetry, result extraction, input limits, and session-cleanup behavior. They do not verify API credentials, model availability, actual subagent quality, MCP uptime, latency, or live cost.
 
-The CLI can write a telemetry JSON file containing the response ID, model, provider-returned usage record, workflow/PR identifiers when present, diff size, and request latency. GitHub Actions retains this file as a 30-day artifact. Calculate monetary cost only from the captured token details and the applicable official model rates for the request date; if usage or applicable rates are unavailable, report cost as unmeasured rather than estimating it.
+## Existing Astra gate
+
+PR #5 remains a separate migration and validation gate. After that PR is merged, the maintainer must manually run **Actions → TIKVARON Engineering Intelligence — Live Validation** with `run_astra_smoke=true` and `astra_model=gpt-6-astra`. Only after a successful live smoke test should a maintainer consider changing Astra-related model routing. This Agents API PR does not trigger that workflow or make a live test request.

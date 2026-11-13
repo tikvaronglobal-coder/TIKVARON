@@ -1,0 +1,112 @@
+name: TIKVARON Engineering Intelligence — Agents API PR Review
+
+on:
+  # Paid reviews require a maintainer-applied label distinct from the Responses API gate.
+  pull_request_target:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number to review
+        required: true
+        type: number
+      confirm_paid_run:
+        description: Confirm that this run may submit a billable Agents API request
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: tikvaron-agents-pr-review-${{ github.event.pull_request.number || inputs.pr_number }}
+  cancel-in-progress: false
+
+jobs:
+  agents-review:
+    # This workflow never runs on PR open/synchronize. A maintainer must label the PR
+    # with agents-review, or explicitly confirm a paid manual dispatch.
+    if: >-
+      (github.event_name == 'pull_request_target' && github.event.label.name == 'agents-review') ||
+      (github.event_name == 'workflow_dispatch' && inputs.confirm_paid_run)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out trusted base revision only
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Install TIKVARON Engineering Intelligence
+        run: python -m pip install --upgrade pip && python -m pip install .
+
+      - name: Fetch PR metadata and bounded diff through GitHub CLI
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ inputs.pr_number || github.event.pull_request.number }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::PR_NUMBER must be a positive integer."
+            exit 1
+          fi
+          PR_HEAD_SHA="$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json headRefOid --jq '.headRefOid')"
+          echo "PR_HEAD_SHA=$PR_HEAD_SHA" >> "$GITHUB_ENV"
+          gh pr diff "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --color never > "$RUNNER_TEMP/agents-pr.diff"
+          diff_bytes=$(wc -c < "$RUNNER_TEMP/agents-pr.diff")
+          if (( diff_bytes == 0 )); then
+            echo "::error::The pull-request diff is empty."
+            exit 1
+          fi
+          if (( diff_bytes > 200000 )); then
+            echo "::error::Diff is larger than the 200 KB Agents API review budget."
+            exit 1
+          fi
+
+      - name: Run advisory Agents API review
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          TIKVARON_AGENTS_MODEL: ${{ vars.TIKVARON_AGENTS_MODEL }}
+          TIKVARON_AGENTS_MAX_SUBAGENTS: ${{ vars.TIKVARON_AGENTS_MAX_SUBAGENTS }}
+          TIKVARON_AGENTS_SESSION_SPEND_LIMIT_CENTS: ${{ vars.TIKVARON_AGENTS_SESSION_SPEND_LIMIT_CENTS }}
+          TIKVARON_ASTRA_VALIDATION_PASSED: ${{ vars.TIKVARON_ASTRA_VALIDATION_PASSED }}
+          PR_NUMBER: ${{ inputs.pr_number || github.event.pull_request.number }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${OPENAI_API_KEY:-}" ]]; then
+            echo "::error::Add an OpenAI application key with api.agents.read, api.agents.write, and api.responses.write permissions."
+            exit 1
+          fi
+          python -m tikvaron_engineering.agents_cli \
+            --diff "$RUNNER_TEMP/agents-pr.diff" \
+            --output "$RUNNER_TEMP/agents-review.md" \
+            --metrics "$RUNNER_TEMP/agents-review-metrics.json"
+
+      - name: Post advisory review comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ inputs.pr_number || github.event.pull_request.number }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh pr review "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
+            --comment --body-file "$RUNNER_TEMP/agents-review.md"
+
+      - name: Upload sanitized review telemetry
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: tikvaron-agents-review-pr-${{ inputs.pr_number || github.event.pull_request.number }}-run-${{ github.run_id }}
+          path: ${{ runner.temp }}/agents-review-metrics.json
+          if-no-files-found: ignore
+          retention-days: 14

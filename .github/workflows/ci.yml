@@ -29,28 +29,28 @@ jobs:
       - name: Apply validated release overlays
         run: python .github/scripts/apply_release_patches.py .tikvaron-release/tikvaron-engineering-intelligence
       - name: Install package and development tools
-        working-directory: \${{ env.TIKVARON_RELEASE_DIR }}
+        working-directory: ${{ env.TIKVARON_RELEASE_DIR }}
         run: python -m pip install --upgrade pip && pip install -e '.[dev]'
       - name: Test GPT-6 Astra and Responses API tools offline
         run: python -m unittest discover -s .github/scripts/tests -v
       - name: Compile Python sources
-        working-directory: \${{ env.TIKVARON_RELEASE_DIR }}
+        working-directory: ${{ env.TIKVARON_RELEASE_DIR }}
         run: python -m compileall -q src scripts tests
       - name: Run automated tests and export JUnit results
-        working-directory: \${{ env.TIKVARON_RELEASE_DIR }}
+        working-directory: ${{ env.TIKVARON_RELEASE_DIR }}
         run: mkdir -p artifacts && pytest --junitxml=artifacts/junit.xml
       - name: Run static lint
-        working-directory: \${{ env.TIKVARON_RELEASE_DIR }}
+        working-directory: ${{ env.TIKVARON_RELEASE_DIR }}
         run: ruff check .
       - name: Convert JUnit results to TIKVARON Test Intelligence
-        if: \${{ always() && hashFiles('.tikvaron-release/tikvaron-engineering-intelligence/artifacts/junit.xml') != '' }}
-        working-directory: \${{ env.TIKVARON_RELEASE_DIR }}
+        if: ${{ always() && hashFiles('.tikvaron-release/tikvaron-engineering-intelligence/artifacts/junit.xml') != '' }}
+        working-directory: ${{ env.TIKVARON_RELEASE_DIR }}
         run: tikvaron-tests artifacts/junit.xml --output artifacts/test-intelligence.json
       - name: Publish test intelligence artifact
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
-          name: tikvaron-test-intelligence-\${{ github.run_id }}
+          name: tikvaron-test-intelligence-${{ github.run_id }}
           path: .tikvaron-release/tikvaron-engineering-intelligence/artifacts/
           if-no-files-found: warn
           retention-days: 14

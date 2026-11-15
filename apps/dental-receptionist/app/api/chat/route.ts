@@ -31,11 +31,17 @@ Safety and truthfulness:
 `.trim();
 
 function extractText(data: any): string {
-  if (typeof data?.output_text === "string") return data.output_text;
+  if (typeof data?.output_text === "string" && data.output_text.trim()) {
+    return data.output_text.trim();
+  }
   const parts: string[] = [];
   for (const item of data?.output ?? []) {
     for (const content of item?.content ?? []) {
-      if (content?.type === "output_text" && typeof content.text === "string") parts.push(content.text);
+      if (content?.type === "output_text" && typeof content.text === "string") {
+        parts.push(content.text);
+      } else if (content?.type === "refusal" && typeof content.refusal === "string") {
+        parts.push(content.refusal);
+      }
     }
   }
   return parts.join("\n").trim();

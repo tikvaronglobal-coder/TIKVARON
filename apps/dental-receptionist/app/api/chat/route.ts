@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
 
   if (!apiKey || !model) {
     return NextResponse.json(
-      { error: "The AI service is not configured yet. This staging project needs an approved model and server-side API key." },
+      { error: "Staging AI is not configured. Check OPENAI_API_KEY and OPENAI_MODEL in the Vercel Preview environment." },
       { status: 503 }
     );
   }
@@ -99,18 +99,53 @@ export async function POST(request: NextRequest) {
       cache: "no-store"
     });
 
-    const data = await upstream.json();
+    let data: any = {};
+    try {
+      data = await upstream.json();
+    } catch {
+      // The upstream response was not valid JSON; keep the public error generic.
+    }
+
     if (!upstream.ok) {
-      console.error("OpenAI request failed", upstream.status);
-      return NextResponse.json({ error: "The receptionist service is temporarily unavailable. Please try again later." }, { status: 502 });
+      const upstreamCode = typeof data?.error?.code === "string" ? data.error.code : "unknown";
+      console.error("OpenAI Responses API rejected staging request", {
+        status: upstream.status,
+        code: upstreamCode,
+        modelConfigured: Boolean(model)
+      });
+
+      if (upstream.status === 401) {
+        return NextResponse.json(
+          { error: "The staging OpenAI API key was rejected (401). Replace OPENAI_API_KEY with a valid key from the TIKVARON-Dental-Staging project in Vercel → Preview, then redeploy." },
+          { status: 503 }
+        );
+      }
+      if (upstream.status === 429) {
+        return NextResponse.json(
+          { error: "The staging AI account has reached a rate or usage limit. Check API billing, project limits, and usage before trying again." },
+          { status: 503 }
+        );
+      }
+      if (upstream.status === 400) {
+        return NextResponse.json(
+          { error: "The staging AI request was rejected. Check that OPENAI_MODEL is an available model for this API project." },
+          { status: 503 }
+        );
+      }
+      return NextResponse.json(
+        { error: "The AI provider could not complete the staging request. Check the Vercel runtime logs for the upstream status." },
+        { status: 502 }
+      );
     }
 
     const reply = extractText(data);
     if (!reply) {
+      console.error("OpenAI Responses API returned no extractable text", { status: upstream.status });
       return NextResponse.json({ error: "The assistant returned an empty response. Please try again." }, { status: 502 });
     }
     return NextResponse.json({ reply });
-  } catch {
-    return NextResponse.json({ error: "Could not reach the receptionist service." }, { status: 502 });
+  } catch (error) {
+    console.error("Staging AI network request failed", error instanceof Error ? error.name : "unknown");
+    return NextResponse.json({ error: "Could not reach the AI provider. Please check the staging deployment and try again." }, { status: 502 });
   }
 }

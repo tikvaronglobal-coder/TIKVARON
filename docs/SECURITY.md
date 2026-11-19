@@ -8,4 +8,5 @@
 - AI findings are advisory. They must not automatically approve, merge, deploy, or modify production resources.
 - Architecture and incident analysis must use the trusted base checkout, never a PR-head checkout in a privileged workflow.
 - Live validation is read-only and writes only a JSON artifact. It never posts review comments or mutates PR state.
+- The GPT-6 Astra smoke test is a separate manual, opt-in job. It exposes `OPENAI_API_KEY` only to the inference step, disables automatic SDK retries, and does not write credentials or prompts to its result artifact.
 - Store `OPENAI_API_KEY` only as a GitHub Actions repository secret.

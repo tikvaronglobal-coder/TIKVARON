@@ -1,0 +1,25 @@
+name: tikvaron-paperclip
+
+services:
+  paperclip:
+    image: ${PAPERCLIP_IMAGE:-ghcr.io/paperclipai/paperclip:v2026.1117.0}
+    container_name: tikvaron-paperclip
+    restart: unless-stopped
+    init: true
+    pids_limit: 2048
+    stop_grace_period: 90s
+    ports:
+      # Loopback-only by default. Do not expose Paperclip directly to the internet.
+      - "${PAPERCLIP_BIND_ADDRESS:-127.0.0.1}:${PAPERCLIP_PORT:-3100}:3100"
+    environment:
+      HOST: "0.0.0.0"
+      PAPERCLIP_HOME: "/paperclip"
+      PAPERCLIP_DEPLOYMENT_MODE: "${PAPERCLIP_DEPLOYMENT_MODE:-authenticated}"
+      PAPERCLIP_DEPLOYMENT_EXPOSURE: "${PAPERCLIP_DEPLOYMENT_EXPOSURE:-private}"
+      PAPERCLIP_PUBLIC_URL: "${PAPERCLIP_PUBLIC_URL:-http://localhost:3100}"
+      BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET:?Set BETTER_AUTH_SECRET in deploy/paperclip/.env}"
+      PAPERCLIP_TOOL_ACTION_SIGNING_SECRET: "${PAPERCLIP_TOOL_ACTION_SIGNING_SECRET:?Set PAPERCLIP_TOOL_ACTION_SIGNING_SECRET in deploy/paperclip/.env}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+    volumes:
+      - "${PAPERCLIP_DATA_DIR:-./data}:/paperclip"

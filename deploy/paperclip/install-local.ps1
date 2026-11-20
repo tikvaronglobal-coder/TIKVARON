@@ -25,7 +25,7 @@ if (-not (Test-Path $EnvPath)) {
     $content = Get-Content -Raw -Path $EnvExample
     $content = $content.Replace("BETTER_AUTH_SECRET=REPLACE_DURING_INSTALL", "BETTER_AUTH_SECRET=$(New-RandomSecret)")
     $content = $content.Replace("PAPERCLIP_TOOL_ACTION_SIGNING_SECRET=REPLACE_DURING_INSTALL", "PAPERCLIP_TOOL_ACTION_SIGNING_SECRET=$(New-RandomSecret)")
-    [System.IO.File]::WriteAllText($EnvPath, $content, (New-Object System.Text.UTF8Encoding($false)))
+    [System.IO.File]::WriteAllText($EnvPath, $content, [System.Text.UTF8Encoding]::new($false))
     Write-Host "Created a private .env file and generated two separate signing secrets."
 }
 else {

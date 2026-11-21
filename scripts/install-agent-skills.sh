@@ -89,7 +89,15 @@ for folder in "$TMP"/trader/trader-* "$TMP"/instagram/skills/ig-*; do
   [[ -f "$folder/SKILL.md" ]] || continue
   cp -a "$folder" "$DEST/$(basename "$folder")"
 done
-cp -a "$(dirname "$0")/../.agents/skills/tikvaron-approval-policy" "$DEST/"
+POLICY_SRC="$(cd "$(dirname "$0")/../.agents/skills/tikvaron-approval-policy" && pwd)"
+POLICY_DEST="$DEST/tikvaron-approval-policy"
+if [[ "$POLICY_SRC" != "$POLICY_DEST" ]]; then
+  if [[ -e "$POLICY_DEST" ]]; then
+    echo "Refusing to overwrite existing policy skill: $POLICY_DEST" >&2
+    exit 1
+  fi
+  cp -a "$POLICY_SRC" "$DEST/"
+fi
 
 echo "Installed 24 upstream skills plus TIKVARON approval policy into: $DEST"
 echo "No credentials, broker connectors, Instagram logins, or publishing integrations were installed."

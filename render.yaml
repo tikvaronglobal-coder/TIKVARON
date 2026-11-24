@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: tikvaron-sales-growth-preview
+    runtime: node
+    plan: free
+    region: singapore
+    branch: chore/render-sales-growth-preview
+    rootDir: apps/sales-growth
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    autoDeploy: false
+    envVars:
+      - key: HUBSPOT_PRIVATE_APP_TOKEN
+        sync: false
+      - key: TIKVARON_PREVIEW_PASSWORD
+        sync: false

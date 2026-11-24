@@ -1,21 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
+import { authorizePreview } from "./lib/preview-auth.mjs";
 
 export function middleware(request: NextRequest) {
-  const serviceKey = process.env.HUBSPOT_PRIVATE_APP_TOKEN;
-  const password = process.env.TIKVARON_PREVIEW_PASSWORD;
+  const decision = authorizePreview({
+    password: process.env.TIKVARON_PREVIEW_PASSWORD ?? "",
+    authorization: request.headers.get("authorization"),
+    isProduction: process.env.NODE_ENV === "production"
+  });
 
-  if (serviceKey && !password) {
-    return new NextResponse("Preview is not secured: configure TIKVARON_PREVIEW_PASSWORD.", { status: 503 });
+  if (decision === "configuration_error") {
+    return new NextResponse("Preview is unavailable until TIKVARON_PREVIEW_PASSWORD is configured.", { status: 503 });
   }
 
-  if (!password) return NextResponse.next();
-
-  const authorization = request.headers.get("authorization");
-  if (authorization?.startsWith("Basic ")) {
-    const decoded = atob(authorization.slice(6));
-    const suppliedPassword = decoded.slice(decoded.indexOf(":") + 1);
-    if (suppliedPassword === password) return NextResponse.next();
-  }
+  if (decision === "allow") return NextResponse.next();
 
   return new NextResponse("Authentication required", {
     status: 401,

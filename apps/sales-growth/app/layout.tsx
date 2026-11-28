@@ -1,11 +1,1 @@
-import type { Metadata } from "next";
-import "./styles.css";
-
-export const metadata: Metadata = {
-  title: "TIKVARON Sales Growth",
-  description: "TIKVARON's private HubSpot integration and sales operations preview."
-};
-
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en"><body>{children}</body></html>;
-}
+import type {Metadata} from "next";import "./styles.css";export const metadata:Metadata={title:{default:"TIKVARON Global | Business Software Research",template:"%s | TIKVARON Global"},description:"Independent, practical research to help entrepreneurs and growing businesses choose software for sales, marketing and operations."};export default function RootLayout({children}:Readonly<{children:React.ReactNode}>){return <html lang="en"><body>{children}</body></html>}
